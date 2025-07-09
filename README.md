@@ -1,5 +1,47 @@
+# ⚡ WattsUp – Energy Spike Anomaly Detection
+
+An end-to-end Machine Learning project to detect abnormal energy spikes from smart meter data using ML algorithms. The project includes a trained model, an interactive web dashboard, and deployment.
 
 ---
+
+## 🚀 Features
+
+- Detect abnormal usage spikes in energy data  
+- Visualize spikes using an interactive dashboard  
+- Upload CSV files to check for anomalies  
+- Real-time energy monitoring with live anomaly detection  
+- Deployable web application
+
+---
+
+## 🧰 Tech Stack
+
+- **Python** – Data processing, ML training  
+- **Flask** – Web server and API  
+- **Pandas, NumPy** – Data manipulation  
+- **Scikit-learn** – ML model (Isolation Forest)  
+- **Chart.js** – Frontend chart visualization  
+- **Bootstrap** – UI styling  
+- **Socket.IO** – Real-time data streaming  
+- **Deployment** – Render / Railway / Replit
+
+
+
+## 📁 Folder Structure
+
+```
+wattsup/
+│
+├── data/ # Raw and processed energy data
+├── model/ # Trained ML model files (.pkl)
+├── notebooks/ # Jupyter notebooks for EDA and modeling
+├── app/ # Flask backend and frontend code
+│ ├── static/ # JavaScript, CSS, Chart.js config
+│ ├── templates/ # HTML templates
+│ └── app.py # Main Flask app
+└── README.md # Project documentation
+
+```
 
 ## ✅ Progress Log
 
