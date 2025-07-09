@@ -1,8 +1,12 @@
 from flask import Flask, render_template, request, jsonify
+from flask_socketio import SocketIO, emit
 import pandas as pd
 import os
+import time
 
+# Initialize Flask + SocketIO
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")  # Required for WebSocket
 
 DATA_DIR = '../data/'
 DEFAULT_MODEL = 'isolation_forest'  # Change to 'lof' or 'ocsvm' if needed
@@ -69,5 +73,36 @@ def upload():
         print("DEBUG: Error loading/merging model data:", e)
         return jsonify({'error': str(e)}), 500
 
+# =======================
+# 🔌 WebSocket Live Stream
+# =======================
+@socketio.on('start_stream')
+def stream_data():
+    print("⚡ Stream started")
+    try:
+        df = pd.read_csv('../data/live_energy.csv')
+        for _, row in df.iterrows():
+            usage = float(row['energy_usage'])
+            anomaly = 1 if usage > 120 or usage < 90 else 0  # Basic rule-based anomaly
+
+            cause = ""
+            if anomaly:
+                cause = "Very High Usage" if usage > 120 else "Very Low Usage"
+
+            socketio.emit('live_data', {
+                'timestamp': row['timestamp'],
+                'energy_usage': usage,
+                'anomaly': anomaly,
+                'cause': cause
+            })
+            socketio.sleep(2)
+    except Exception as e:
+        print("❌ Error during stream:", e)
+        emit('error', {'message': str(e)})
+
+
+# =============
+# Run the App
+# =============
 if __name__ == '__main__':
-    app.run(debug=True)
+    socketio.run(app, debug=True)  # Use socketio.run instead of app.run
