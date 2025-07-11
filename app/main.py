@@ -1,51 +1,60 @@
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO, emit
-import pandas as pd
+import sys
 import os
 import time
+import pandas as pd
+from flask import Flask, render_template, request, jsonify
+from flask_socketio import SocketIO, emit
+import google.generativeai as genai
+import shap
 
-# Initialize Flask + SocketIO
+# Add parent directory to sys.path
+sys.path.append("..")
+
+# Import SHAP explanation and feature loader
+from model.shap_explainer import get_shap_explanation_for_index, precompute_shap_for_anomalies
+from data.load_features import load_features
+
+# Configure Gemini API
+genai.configure(api_key="AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg")  # Replace with env var for production
+
+# Initialize Flask App
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")  # Required for WebSocket
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 DATA_DIR = '../data/'
-DEFAULT_MODEL = 'isolation_forest'  # Change to 'lof' or 'ocsvm' if needed
+DEFAULT_MODEL = 'isolation_forest'
 
+# Main Dashboard
 @app.route('/')
 def index():
-    return render_template('index.html')  # Loads your HTML dashboard
+    return render_template('index.html')
 
+# Upload CSV & Merge
 @app.route('/upload', methods=['POST'])
 def upload():
     if 'file' not in request.files:
-        print("DEBUG: No file in request.files")
         return jsonify({'error': 'No file uploaded'}), 400
 
     uploaded_file = request.files['file']
     if uploaded_file.filename == '':
-        print("DEBUG: Uploaded file has no name")
         return jsonify({'error': 'No selected file'}), 400
 
     try:
-        # Load uploaded file
         df = pd.read_csv(uploaded_file)
-        print("DEBUG: CSV columns received:", df.columns.tolist())
-
-        # Rename 'date' column to 'timestamp' if needed
         if 'date' in df.columns:
             df.rename(columns={'date': 'timestamp'}, inplace=True)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-        # Load corresponding model output file
         model_file_path = os.path.join(DATA_DIR, f'{DEFAULT_MODEL}_output.csv')
+        if not os.path.exists(model_file_path):
+            return jsonify({'error': f"Model output file not found at {model_file_path}"}), 400
+
         model_df = pd.read_csv(model_file_path)
-        print("DEBUG: Model file columns:", model_df.columns.tolist())
 
         if 'date' in model_df.columns:
             model_df.rename(columns={'date': 'timestamp'}, inplace=True)
         model_df['timestamp'] = pd.to_datetime(model_df['timestamp'])
 
-        # Find a model-specific anomaly column (e.g., 'iso_anomaly')
         anomaly_col = None
         for col in model_df.columns:
             if 'anomaly' in col and col not in ['score', 'anomaly']:
@@ -55,27 +64,41 @@ def upload():
         if not anomaly_col:
             raise Exception("No model anomaly column found")
 
-        print("DEBUG: Using anomaly column:", anomaly_col)
-
-        # Rename model anomaly column to prevent conflict
         model_df.rename(columns={anomaly_col: 'model_anomaly'}, inplace=True)
-
-        # Merge and assign unified 'anomaly' column
         merged = pd.merge(df, model_df[['timestamp', 'model_anomaly']], on='timestamp', how='left')
         merged['anomaly'] = merged['model_anomaly'].fillna(0).astype(int)
 
-        # Prepare JSON response
+        # Pre-compute SHAP explanations for anomalies
+        try:
+            _, features_df = load_features()
+            anomaly_indices = merged[merged['anomaly'] == -1].index.tolist()
+            precompute_shap_for_anomalies(anomaly_indices)
+        except Exception as e:
+            print(f"Warning: Could not pre-compute SHAP explanations: {e}")
+
         response_data = merged[['timestamp', 'energy_usage', 'anomaly']].copy()
         response_data['timestamp'] = response_data['timestamp'].dt.strftime('%Y-%m-%d')
         return jsonify(response_data.to_dict(orient='records'))
 
     except Exception as e:
-        print("DEBUG: Error loading/merging model data:", e)
+        print("DEBUG: Error:", e)
         return jsonify({'error': str(e)}), 500
 
-# =======================
-# 🔌 WebSocket Live Stream
-# =======================
+# SHAP Explanation API Route
+@app.route('/api/explain/<int:index>')
+def explain(index):
+    try:
+        _, features_df = load_features()
+        explanation = get_shap_explanation_for_index(index, features_df)
+        return jsonify({
+            "index": index,
+            "explanation": explanation
+        })
+    except Exception as e:
+        print(f"SHAP Explanation error for index {index}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Live WebSocket Stream
 @socketio.on('start_stream')
 def stream_data():
     print("⚡ Stream started")
@@ -83,7 +106,7 @@ def stream_data():
         df = pd.read_csv('../data/live_energy.csv')
         for _, row in df.iterrows():
             usage = float(row['energy_usage'])
-            anomaly = 1 if usage > 120 or usage < 90 else 0  # Basic rule-based anomaly
+            anomaly = 1 if usage > 120 or usage < 90 else 0
 
             cause = ""
             if anomaly:
@@ -95,14 +118,33 @@ def stream_data():
                 'anomaly': anomaly,
                 'cause': cause
             })
+
             socketio.sleep(2)
     except Exception as e:
-        print("❌ Error during stream:", e)
+        print("❌ Stream error:", e)
         emit('error', {'message': str(e)})
 
+# AI Insight using Gemini
+@app.route('/insight', methods=['POST'])
+def get_insight():
+    data = request.get_json()
+    usage = data.get("energy_usage", 0)
+    timestamp = data.get("timestamp", "unknown")
 
-# =============
-# Run the App
-# =============
+    prompt = (
+        f"The following energy usage was recorded: {usage} kWh at {timestamp}. "
+        f"In one sentence, explain whether this usage is normal or abnormal."
+    )
+
+    try:
+        model = genai.GenerativeModel(model_name='gemini-1.5-pro-latest')
+        response = model.generate_content(prompt)
+        explanation = response.text.strip()
+        return jsonify({"insight": explanation})
+    except Exception as e:
+        print("Gemini error:", e)
+        return jsonify({"insight": f"⚠️ Could not fetch AI insight: {e}"}), 500
+
+# Run Flask App
 if __name__ == '__main__':
-    socketio.run(app, debug=True)  # Use socketio.run instead of app.run
+    socketio.run(app, debug=True)
