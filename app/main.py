@@ -18,8 +18,9 @@ from data.load_features import load_features
 # Configure eventlet for WebSocket
 eventlet.monkey_patch()
 
-# Configure Gemini API
-genai.configure(api_key="AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg")  # Replace with env var in production
+# Configure Gemini AP
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+  # Replace with env var in production
 
 # Initialize Flask App
 app = Flask(__name__)
