@@ -8,8 +8,8 @@ import google.generativeai as genai
 import shap
 import eventlet
 
-# Add parent directory to sys.path
-sys.path.append("..")
+# Fix Python path so we can import from parent directory modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import SHAP explanation and feature loader
 from model.shap_explainer import get_shap_explanation_for_index, precompute_shap_for_anomalies
@@ -18,9 +18,8 @@ from data.load_features import load_features
 # Configure eventlet for WebSocket
 eventlet.monkey_patch()
 
-# Configure Gemini AP
+# Configure Gemini API
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-  # Replace with env var in production
 
 # Initialize Flask App
 app = Flask(__name__)
