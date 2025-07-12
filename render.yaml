@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: wattsup
+    env: python
+    runtime: python3
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app/app.py"
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: GOOGLE_API_KEY
+        sync: false  

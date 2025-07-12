@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 import google.generativeai as genai
 import shap
+import eventlet
 
 # Add parent directory to sys.path
 sys.path.append("..")
@@ -14,12 +15,15 @@ sys.path.append("..")
 from model.shap_explainer import get_shap_explanation_for_index, precompute_shap_for_anomalies
 from data.load_features import load_features
 
+# Configure eventlet for WebSocket
+eventlet.monkey_patch()
+
 # Configure Gemini API
-genai.configure(api_key="AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg")  # Replace with env var for production
+genai.configure(api_key="AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg")  # Replace with env var in production
 
 # Initialize Flask App
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
 DATA_DIR = '../data/'
 DEFAULT_MODEL = 'isolation_forest'
@@ -147,4 +151,4 @@ def get_insight():
 
 # Run Flask App
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=10000)
