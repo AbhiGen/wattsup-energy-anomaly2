@@ -31,29 +31,33 @@
 
 ## 🗂️ Folder Structure
 ```
-wattsup/
-│
-├── data/ # Raw and processed energy data
-│ └── processed_with_anomalies.csv
-│
-├── model/ # Trained machine learning models
-│ └── isolation_forest.pkl
-│
-├── notebooks/ # Jupyter notebooks for EDA and modeling
-│ ├── forecasting_prophet.ipynb
-│ └── anomaly_detection_iforest.ipynb
-│
-├── app/ # Flask application code
-│ ├── static/ # JS, CSS, and Chart.js configurations
-│ │ ├── style.css
-│ │ └── chart.js
-│ ├── templates/ # HTML templates
-│ │ └── index.html
-│ └── app.py # Main Flask backend
-│
-├── requirements.txt # Python dependencies
-└── README.md # Project documentation
-
+project_root/
+├── app/
+│   ├── static/
+│   └── templates/
+│       └── index.html
+├── main.py
+├── data/
+│   ├── __pycache__/
+│   │   └── load_features.cpython-312.pyc
+│   ├── __init__.py
+│   ├── features.csv
+│   ├── isolation_forest_output.csv
+│   ├── live_energy.csv
+│   ├── load_features.py
+│   ├── lof_anomalies.csv
+│   ├── ocsvm_anomalies.csv
+│   ├── processed_with_anomalies.csv
+│   └── test_data.csv
+├── model/
+│   ├── __pycache__/
+│   ├── __init__.py
+│   ├── isolation_forest.pkl
+│   ├── shap_explainer.py
+├── notebooks/
+├── .gitignore
+├── README.md
+└── render.yaml
 yaml
 Copy
 Edit
