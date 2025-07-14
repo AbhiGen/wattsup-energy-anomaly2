@@ -7,22 +7,30 @@ from functools import lru_cache
 from flask_socketio import SocketIO, emit
 import google.generativeai as genai
 import shap
+import eventlet
 
-# Add parent directory to sys.path
-sys.path.append("..")
+# Fix Python path so we can import from parent directory modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import SHAP explanation and feature loader
 from model.shap_explainer import get_shap_explanation_for_index, precompute_shap_for_anomalies
 from data.load_features import load_features
 
+# Configure eventlet for WebSocket
+eventlet.monkey_patch()
+
 # Configure Gemini API
+<<<<<<< HEAD
 # It is strongly recommended to load the API key from an environment variable for security.
 # Example: genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 genai.configure(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg"))  # Replace with env var for production
+=======
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+>>>>>>> e2bdb23051e2b5a83dba7653e7e29ef014312186
 
 # Initialize Flask App
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
 DATA_DIR = '../data/'
 DEFAULT_MODEL = 'isolation_forest'
@@ -166,4 +174,4 @@ def get_insight():
 
 # Run Flask App
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=10000)
