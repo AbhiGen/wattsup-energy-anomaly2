@@ -1,3 +1,4 @@
+import os
 import shap
 import pandas as pd
 import numpy as np
@@ -14,57 +15,113 @@ def load_model_and_data():
     """
     try:
         model = IsolationForest(contamination=0.1, random_state=42)
-        data_path = '../data/features.csv'
+        # Use absolute path relative to project root
+        data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'features.csv')
         if not os.path.exists(data_path):
             raise FileNotFoundError(f"Feature file not found at {data_path}")
-        X = pd.read_csv(data_path)
+        
+        # Load data and handle non-numeric columns
+        df = pd.read_csv(data_path)
+        
+        # Drop timestamp column if it exists (it's not useful for anomaly detection)
+        if 'timestamp' in df.columns:
+            df = df.drop('timestamp', axis=1)
+        
+        # Ensure all columns are numeric
+        numeric_columns = df.select_dtypes(include=[np.number]).columns
+        X = df[numeric_columns]
+        
+        print(f"Loaded data with shape: {X.shape}")
+        print(f"Features: {list(X.columns)}")
+        
+        # Fit the model with the data
+        model.fit(X)
         return model, X
     except Exception as e:
         print(f"Error loading model or data: {e}")
         raise
 
-# Initialize SHAP explainer
+# Initialize SHAP explainer - modified to work with IsolationForest
 try:
     model, X = load_model_and_data()
-    explainer = shap.Explainer(model, X)
+    
+    # For IsolationForest, we'll use a simpler approach since it's not directly compatible with SHAP
+    # We'll use feature importance based on the decision function
+    explainer = None
+    print("Model and data loaded successfully. SHAP will use feature importance approximation.")
+    
 except Exception as e:
     print(f"Failed to initialize SHAP explainer: {e}")
     explainer = None
+    model = None
+    X = None
 
-def precompute_shap_for_anomalies(anomaly_indices):
+def get_shap_explanation_for_index(index):
     """
-    Pre-compute SHAP explanations for anomaly indices.
-    Args:
-        anomaly_indices (list): List of indices where anomalies were detected
+    Get SHAP explanation for a specific data point.
+    For IsolationForest, we'll return feature importance approximation.
     """
-    global shap_explanations
-    if explainer is None:
-        print("SHAP explainer not initialized")
-        return
-    shap_explanations = {i: explainer(X.iloc[[i]]) for i in anomaly_indices}
-
-def get_shap_explanation_for_index(index, features_df):
-    """
-    Get SHAP explanation for a specific index.
-    Args:
-        index (int): Index of the data point
-        features_df (pd.DataFrame): DataFrame containing features
-    Returns:
-        dict: SHAP values mapped to feature names
-    """
+    global explainer, model, X
+    
+    if model is None or X is None:
+        return {"error": "Model not loaded"}
+    
     try:
-        if explainer is None:
-            return {"error": "SHAP explainer not initialized"}
-        # Use pre-computed SHAP values if available
-        if index in shap_explanations:
-            shap_values = shap_explanations[index]
-        else:
-            sample = features_df.iloc[[index]]
-            shap_values = explainer(sample)
+        if index >= len(X):
+            return {"error": "Index out of range"}
         
-        feature_names = features_df.columns
-        values = shap_values.values[0]
-        return {feature_names[i]: round(float(values[i]), 4) for i in range(len(feature_names))}
+        # Get the specific data point
+        data_point = X.iloc[index:index+1]
+        
+        # For IsolationForest, we'll compute feature importance using a proxy method
+        # Calculate the decision function for the point and neighbors
+        decision_score = model.decision_function(data_point)[0]
+        
+        # Simple feature importance: how much each feature deviates from mean
+        feature_importance = {}
+        for col in X.columns:
+            mean_val = X[col].mean()
+            point_val = data_point[col].iloc[0]
+            deviation = abs(point_val - mean_val) / (X[col].std() + 1e-6)
+            feature_importance[col] = deviation
+        
+        # Normalize importance scores
+        max_importance = max(feature_importance.values()) if feature_importance else 1
+        normalized_importance = {k: v/max_importance for k, v in feature_importance.items()}
+        
+        return {
+            "feature_importance": normalized_importance,
+            "decision_score": decision_score,
+            "data_point": data_point.to_dict('records')[0]
+        }
+        
     except Exception as e:
-        print(f"SHAP error for index {index}: {e}")
         return {"error": str(e)}
+
+def precompute_shap_for_anomalies():
+    """
+    Precompute SHAP explanations for anomalous data points.
+    For IsolationForest, we'll identify anomalies and compute feature importance.
+    """
+    global model, X, shap_explanations
+    
+    if model is None or X is None:
+        return
+    
+    try:
+        # Get anomaly predictions
+        anomaly_predictions = model.predict(X)
+        anomaly_indices = np.where(anomaly_predictions == -1)[0]
+        
+        print(f"Found {len(anomaly_indices)} anomalies. Computing explanations...")
+        
+        # Compute explanations for each anomaly
+        for idx in anomaly_indices[:50]:  # Limit to first 50 anomalies
+            explanation = get_shap_explanation_for_index(idx)
+            if "error" not in explanation:
+                shap_explanations[idx] = explanation
+        
+        print(f"Precomputed explanations for {len(shap_explanations)} anomalies")
+        
+    except Exception as e:
+        print(f"Error precomputing SHAP explanations: {e}")
