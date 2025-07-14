@@ -64,56 +64,82 @@ Edit
 ```
 ---
 
-## 📅 Day-wise Contribution Log
 
-### ✅ Day 1 – Project Setup
 
-- Initialized GitHub repository  
-- Created modular folder structure for data, models, app, and notebooks  
+## 2. **Problem Definition & Understanding**
 
----
-
-### ✅ Day 2 – Time Series Forecasting
-
-- Cleaned and resampled electricity usage data  
-- Performed EDA with trend visualizations  
-- Trained **Facebook Prophet** for 30-day forecasting  
-- Plotted forecast with confidence intervals and components  
-- Saved forecast notebook  
+In many rural communities, erratic power consumption patterns and undetected energy anomalies result in increased costs, damaged equipment, and poor energy planning. These anomalies can go unnoticed due to lack of real-time monitoring tools and predictive intelligence. Addressing this issue is critical for promoting energy resilience, affordability, and efficient planning in resource-constrained settings. Detecting energy spikes and consumption irregularities can reduce outages, optimize load distribution, and support the deployment of renewable microgrids. Our solution provides a way to detect these spikes early using ML models, ensuring proactive energy management for rural households and institutions.
 
 ---
 
-### ✅ Day 3 – Anomaly Detection
+## 3. **Design Approaches Explored**
 
-- Trained **Isolation Forest** with 1% contamination  
-- Labeled abnormal spikes in energy usage  
-- Visualized anomalies using Matplotlib  
-- Saved model and output with anomaly labels  
+We explored multiple techniques:
 
----
+* **Threshold-based detection**: Simple, but not adaptable to seasonal/time-based usage changes.
+* **Statistical Z-score anomaly detection**: Sensitive to noise; poor in identifying non-linear patterns.
+* **Machine Learning models (e.g., Isolation Forest, LOF, OCSVM)**: Good performance but needs preprocessing.
+* **Deep Learning (LSTMs)**: High accuracy but requires large datasets and high compute.
 
-### ✅ Day 4 – Web App Development
-
-- Built Flask web application with CSV upload  
-- Integrated **Chart.js** for interactive charts  
-- Added:
-  - Anomaly toggle  
-  - Zoom, pan, and reset  
-  - Dark/light theme switch  
-  - Download options: PNG, PDF, CSV  
-  - Data table and custom date filters  
+**Chosen:** Hybrid approach using Facebook Prophet for forecasting and Isolation Forest for anomalies — offering a balance of accuracy, interpretability, and deployment feasibility.
 
 ---
 
-### ✅ Day 5 – Real-Time Streaming
+## 4. **Best-Fit Solution Chosen & Rationale**
 
-- Integrated **Socket.IO** for real-time backend-to-frontend streaming  
-- Plotted live usage with streaming updates  
-- Detected and displayed live anomalies in red  
-- Enhanced tooltips with anomaly cause  
-- Added live anomaly table  
+We selected a lightweight ML stack combining **Facebook Prophet** for time-series forecasting and **Isolation Forest** for anomaly detection. This approach handles seasonal and temporal energy variations while being computationally efficient. It allows real-time and batch data processing, supports custom CSV uploads, and visualizes anomalies interactively. The system suits low-resource environments and can be deployed easily in web or mobile interfaces, empowering rural users and administrators with real-time energy insights.
 
 ---
+
+## 5. **Design Process**
+
+We followed the **Design Thinking approach**:
+
+1. **Empathize**: Identified challenges from rural electrification use cases.
+2. **Define**: Targeted the problem of undetected energy spikes.
+3. **Ideate**: Explored various forecasting and anomaly detection models.
+4. **Prototype**: Built a modular, interactive Flask-based web app.
+5. **Test**: Validated with simulated and uploaded energy datasets.
+
+Participatory inputs from community energy experts and academic mentors shaped our model parameters and interface design.
+
+---
+
+## 6. **Architecture of the Proposed Solution**
+
+**Core Components:**
+
+* **Frontend**: HTML + Chart.js dashboard (Dark/Light toggle, filters, zoom, download options).
+* **Backend**: Flask + Python (REST endpoints, model orchestration).
+* **Forecasting Module**: Facebook Prophet for trend and seasonal prediction.
+* **Anomaly Detector**: Isolation Forest model with adjustable contamination.
+* **Real-Time Streaming**: Socket.IO for live visualization and updates.
+* **Visualization**: Highlight anomalies in red, export PNG/PDF/CSV.
+
+**Technology Stack**: Python, Pandas, Scikit-learn, Prophet, Flask, Chart.js, Bootstrap, Socket.IO
+
+> !\[Optional: Insert architecture diagram or system sketch here]
+
+---
+
+## 7. **Target Audience / Beneficiaries**
+
+* **Primary Users**:
+
+  * Rural households with smart meters
+  * Village-level grid operators
+  * Microgrid providers and energy cooperatives
+
+* **Secondary Users**:
+
+  * Researchers and NGOs monitoring rural energy sustainability
+  * Students and energy innovation hubs
+
+---
+
+## 8. **Scalability Vision**
+
+WattsUp is modular and deployable on cloud (Render/Railway) or edge (Raspberry Pi) setups. It uses open-source technologies and is trained on customizable thresholds, making it easily adaptable across geographies and datasets. With scheduled retraining and REST API integration, it can support community-scale deployments and integrate with renewable systems. Planned enhancements include:  
 
 ## 🌱 Future Improvements
 
