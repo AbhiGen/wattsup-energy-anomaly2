@@ -3,6 +3,7 @@ import os
 import time
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
+from functools import lru_cache
 from flask_socketio import SocketIO, emit
 import google.generativeai as genai
 import shap
@@ -15,7 +16,9 @@ from model.shap_explainer import get_shap_explanation_for_index, precompute_shap
 from data.load_features import load_features
 
 # Configure Gemini API
-genai.configure(api_key="AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg")  # Replace with env var for production
+# It is strongly recommended to load the API key from an environment variable for security.
+# Example: genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyAQc6Y-vomCUSdz1w8y5SuP9wzazdqCWEg"))  # Replace with env var for production
 
 # Initialize Flask App
 app = Flask(__name__)
@@ -124,26 +127,42 @@ def stream_data():
         print("❌ Stream error:", e)
         emit('error', {'message': str(e)})
 
+# This function can be cached because its arguments are simple, hashable types.
+@lru_cache(maxsize=128)
+def fetch_gemini_insight(usage, timestamp):
+    """
+    Fetches insight from the Gemini API. This function is cached to avoid
+    repeated calls for the same data and to help with rate limiting.
+    """
+    prompt = (
+        f"The following energy usage was recorded: {usage} kWh at {timestamp}. "
+        f"In one sentence, explain whether this usage is normal or abnormal for a household."
+    )
+    # Switch to gemini-1.0-pro, which has a more generous free tier (e.g., 60 RPM)
+    # and is well-suited for this kind of simple text generation task.
+    model = genai.GenerativeModel(model_name='gemini-pro')
+    response = model.generate_content(prompt)
+    return response.text.strip()
+
 # AI Insight using Gemini
 @app.route('/insight', methods=['POST'])
 def get_insight():
     data = request.get_json()
     usage = data.get("energy_usage", 0)
     timestamp = data.get("timestamp", "unknown")
-
-    prompt = (
-        f"The following energy usage was recorded: {usage} kWh at {timestamp}. "
-        f"In one sentence, explain whether this usage is normal or abnormal."
-    )
+    
+    # Round usage to make caching more effective for similar values
+    rounded_usage = round(usage, 1)
 
     try:
-        model = genai.GenerativeModel(model_name='gemini-1.5-pro-latest')
-        response = model.generate_content(prompt)
-        explanation = response.text.strip()
+        explanation = fetch_gemini_insight(rounded_usage, timestamp)
         return jsonify({"insight": explanation})
     except Exception as e:
         print("Gemini error:", e)
-        return jsonify({"insight": f"⚠️ Could not fetch AI insight: {e}"}), 500
+        error_message = str(e)
+        if "quota" in error_message.lower() or "429" in error_message:
+            return jsonify({"insight": "⚠️ AI insight is temporarily unavailable due to high demand. Please try again in a minute."}), 429
+        return jsonify({"insight": f"⚠️ Could not fetch AI insight: {error_message}"}), 500
 
 # Run Flask App
 if __name__ == '__main__':

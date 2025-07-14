@@ -2,145 +2,206 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WattsUp – Energy Anomaly Detection</title>
 
-  <!-- Bootstrap & Chart.js -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Tailwind CSS for rich styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Bootstrap for modals and components -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Chart.js and Zoom Plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+
+  <!-- HTML2PDF for PDF export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- Socket.IO for live streaming -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
   <style>
-    body.light-theme { background: #fff; color: #000; }
-    body.dark-theme { background: #121212; color: #fff; }
-    canvas { margin-top: 30px; }
-    #spinner { display: none; }
-    .date-range { margin-top: 1rem; }
-    .anomaly-table th, .anomaly-table td { text-align: center; }
-    #aiInsightBox {
-      font-size: 1.1rem;
-      font-weight: 500;
-      max-width: 800px;
-      margin: auto;
+    #chartCanvas {
+      max-height: 500px;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    #shapChart {
+      max-height: 400px;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    .dark-theme #chartCanvas,
+    .dark-theme #shapChart {
+      background: rgba(30, 30, 30, 0.9);
+    }
+    .spinner-border {
+      width: 3rem;
+      height: 3rem;
+    }
+    .anomaly-table th,
+    .anomaly-table td {
+      text-align: center;
+      vertical-align: middle;
+    }
+    .modal-content {
+      border-radius: 0.75rem;
     }
   </style>
 </head>
 
-<body class="light-theme text-center p-4">
-  <h1 class="mb-4">⚡ WattsUp – Upload CSV</h1>
+<body class="light-theme bg-gray-100 text-gray-900 font-sans antialiased">
+  <!-- Header Section -->
+  <header class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 shadow-lg">
+    <div class="container mx-auto px-4">
+      <h1 class="text-3xl font-bold tracking-tight">⚡ WattsUp – Energy Anomaly Detection</h1>
+      <p class="text-sm mt-1">Advanced analytics for energy usage anomalies</p>
+    </div>
+  </header>
 
-  <!-- Toggles -->
-  <div class="form-check form-switch d-inline me-3">
-    <input class="form-check-input" type="checkbox" id="themeToggle">
-    <label class="form-check-label" for="themeToggle">Dark Mode</label>
-  </div>
-  <div class="form-check form-switch d-inline me-3">
-    <input class="form-check-input" type="checkbox" id="toggleAnomalies" checked>
-    <label class="form-check-label" for="toggleAnomalies">Show Anomalies</label>
-  </div>
-  <div class="form-check form-switch d-inline me-3">
-    <input class="form-check-input" type="checkbox" id="toggleMA" checked>
-    <label class="form-check-label" for="toggleMA">Show Moving Average</label>
-  </div>
-
-  <!-- Model Selector -->
-  <div class="mt-3">
-    <label for="modelSelect">🔍 Choose Detection Model:</label>
-    <select id="modelSelect" class="form-select w-25 d-inline">
-      <option value="isolation_forest">Isolation Forest</option>
-      <option value="lof">Local Outlier Factor</option>
-      <option value="ocsvm">One-Class SVM</option>
-      <option value="autoencoder">AutoEncoder</option>
-    </select>
-  </div>
-
-  <!-- Upload -->
-  <form id="uploadForm" class="mt-3">
-    <input type="file" name="file" id="fileInput" required class="form-control w-25 d-inline"/>
-    <button type="submit" class="btn btn-primary ms-2">Upload & Detect</button>
-  </form>
-
-  <!-- 📡 Start Live Stream Button -->
-  <div class="mt-3">
-    <button id="startLiveStreamBtn" class="btn btn-info">📡 Start Live Stream</button>
-  </div>
-
-  <!-- Spinner -->
-  <div id="spinner" class="mt-3">
-    <div class="spinner-border text-primary" role="status"></div>
-    <p>Processing CSV...</p>
-  </div>
-
-  <!-- Download Buttons -->
-  <a id="downloadLink" class="btn btn-success btn-sm ms-2" style="display:none;" download="wattsup_anomalies.csv">Download CSV</a>
-  <button id="downloadImage" class="btn btn-outline-primary btn-sm ms-2" style="display:none;">Download PNG</button>
-  <button id="downloadPDF" class="btn btn-outline-dark btn-sm ms-2" style="display:none;">Export PDF</button>
-
-  <!-- Date Range Filter -->
-  <div class="date-range">
-    <label>Filter Date Range:</label>
-    <input type="date" id="startDate" class="mx-2"/>
-    <input type="date" id="endDate"/>
-    <button id="applyFilter" class="btn btn-sm btn-secondary ms-2">Apply</button>
-  </div>
-
-  <!-- Chart Canvas -->
-  <div style="position: relative; height: 400px; width: 100%; max-width: 1000px; margin: auto;">
-    <canvas id="chartCanvas"></canvas>
-  </div>
-
-  <!-- Zoom/Pan Controls -->
-  <div class="mt-3">
-    <button class="btn btn-outline-secondary btn-sm" onclick="panChart('left')">←</button>
-    <button class="btn btn-outline-secondary btn-sm" onclick="panChart('right')">→</button>
-    <button class="btn btn-outline-secondary btn-sm" onclick="panChart('up')">↑</button>
-    <button class="btn btn-outline-secondary btn-sm" onclick="panChart('down')">↓</button>
-    <button class="btn btn-outline-secondary btn-sm ms-2" onclick="zoomChart('in')">➕ Zoom In</button>
-    <button class="btn btn-outline-secondary btn-sm" onclick="zoomChart('out')">➖ Zoom Out</button>
-    <button class="btn btn-warning btn-sm ms-2" onclick="resetZoom()">🔄 Reset</button>
-  </div>
-
-  <!-- Anomaly Table -->
-  <div id="anomalyTableContainer" class="container mt-4" style="display:none;">
-    <h5 class="text-center">📉 Detected Anomalies</h5>
-    <table class="table table-bordered table-sm anomaly-table">
-      <thead><tr><th>Date</th><th>Energy Usage (kWh)</th></tr></thead>
-      <tbody id="anomalyTableBody"></tbody>
-    </table>
-  </div>
-
-  <!-- ✅ Live Anomaly Table -->
-  <div id="liveAnomalyTableContainer" class="container mt-4" style="display: none;">
-    <h5 class="text-center">📡 Real-Time Detected Anomalies</h5>
-    <table class="table table-bordered table-sm anomaly-table">
-      <thead><tr><th>Timestamp</th><th>Energy Usage (kWh)</th><th>Cause</th></tr></thead>
-      <tbody id="liveAnomalyTableBody"></tbody>
-    </table>
-  </div>
-
-  <!-- ✅ AI Insight Box -->
-  <div id="aiInsightBox" class="alert alert-info mt-4" style="display: none;">
-    <strong>🔍 AI Insight:</strong> <span id="aiInsightText">Waiting for data...</span>
-  </div>
-
-  <!-- 🔍 SHAP Explanation Modal -->
-  <div class="modal fade" id="shapModal" tabindex="-1" aria-labelledby="shapModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">SHAP Explanation</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  <!-- Main Content -->
+  <main class="container mx-auto px-4 py-8 max-w-6xl">
+    <!-- Control Panel -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+      <div class="flex flex-wrap gap-4 items-center justify-between">
+        <!-- Theme Toggle -->
+        <div class="flex items-center space-x-2">
+          <input type="checkbox" id="themeToggle" class="form-check-input h-5 w-5 accent-blue-600" />
+          <label for="themeToggle" class="text-sm font-medium">Dark Mode</label>
         </div>
-        <div class="modal-body">
-          <canvas id="shapChart"></canvas>
+
+        <!-- Toggle Switches -->
+        <div class="flex space-x-4">
+          <div class="flex items-center space-x-2">
+            <input type="checkbox" id="toggleAnomalies" checked class="form-check-input h-5 w-5 accent-blue-600" />
+            <label for="toggleAnomalies" class="text-sm font-medium">Show Anomalies</label>
+          </div>
+          <div class="flex items-center space-x-2">
+            <input type="checkbox" id="toggleMA" checked class="form-check-input h-5 w-5 accent-blue-600" />
+            <label for="toggleMA" class="text-sm font-medium">Show Moving Average</label>
+          </div>
+        </div>
+
+        <!-- Model Selector -->
+        <div class="flex items-center space-x-2">
+          <label for="modelSelect" class="text-sm font-medium">🔍 Detection Model:</label>
+          <select id="modelSelect" class="form-select w-40 border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            <option value="isolation_forest">Isolation Forest</option>
+            <option value="lof">Local Outlier Factor</option>
+            <option value="ocsvm">One-Class SVM</option>
+            <option value="autoencoder">AutoEncoder</option>
+          </select>
         </div>
       </div>
     </div>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Upload and Live Stream Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+      <!-- Upload Form -->
+      <form id="uploadForm" class="flex-1">
+        <div class="flex items-center space-x-2">
+          <input type="file" name="file" id="fileInput" required class="form-control file-input w-full max-w-xs border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+          <button type="submit" class="btn bg-blue-600 text-white hover:bg-blue-700 rounded-md px-4 py-2 transition-colors">Upload & Detect</button>
+        </div>
+      </form>
+
+      <!-- Live Stream Button -->
+      <button id="startLiveStreamBtn" class="btn bg-green-600 text-white hover:bg-green-700 rounded-md px-4 py-2 transition-colors">📡 Start Live Stream</button>
+    </div>
+
+    <!-- Spinner -->
+    <div id="spinner" class="flex items-center space-x-2 text-blue-600 mt-4" style="display: none;">
+      <div class="spinner-border text-blue-600" role="status"></div>
+      <p class="text-sm font-medium">Processing CSV...</p>
+    </div>
+
+    <!-- Download Buttons -->
+    <div class="flex space-x-2 mt-4">
+      <a id="downloadLink" class="btn bg-green-600 text-white hover:bg-green-700 rounded-md px-3 py-1.5 text-sm transition-colors" style="display:none;" download="wattsup_anomalies.csv">Download CSV</a>
+      <button id="downloadImage" class="btn border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-md px-3 py-1.5 text-sm transition-colors" style="display:none;">Download PNG</button>
+      <button id="downloadPDF" class="btn border border-gray-600 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" style="display:none;">Export PDF</button>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6 flex items-center space-x-2">
+      <label class="text-sm font-medium">Filter Date Range:</label>
+      <input type="date" id="startDate" class="border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 p-1" />
+      <input type="date" id="endDate" class="border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 p-1" />
+      <button id="applyFilter" class="btn bg-blue-600 text-white hover:bg-blue-700 rounded-md px-3 py-1.5 text-sm transition-colors">Apply</button>
+    </div>
+
+    <!-- Chart Canvas -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mt-6">
+      <div style="position: relative; height: 500px; width: 100%; max-width: 1000px; margin: auto;">
+        <canvas id="chartCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Zoom/Pan Controls -->
+    <div class="flex justify-center gap-2 mt-4">
+      <button class="btn border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="panChart('left')">←</button>
+      <button class="btn border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="panChart('right')">→</button>
+      <button class="btn border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="panChart('up')">↑</button>
+      <button class="btn border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="panChart('down')">↓</button>
+      <button class="btn border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="zoomChart('in')">➕ Zoom In</button>
+      <button class="btn border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="zoomChart('out')">➖ Zoom Out</button>
+      <button class="btn bg-yellow-500 text-white hover:bg-yellow-600 rounded-md px-3 py-1.5 text-sm transition-colors" onclick="resetZoom()">🔄 Reset</button>
+    </div>
+
+    <!-- Anomaly Table -->
+    <div id="anomalyTableContainer" class="mt-6" style="display:none;">
+      <h5 class="text-lg font-semibold text-center text-gray-800 dark:text-gray-200 mb-2">📉 Detected Anomalies</h5>
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+        <table class="table anomaly-table w-full">
+          <thead class="bg-gray-100 dark:bg-gray-700">
+            <tr>
+              <th class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300">Date</th>
+              <th class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300">Energy Usage (kWh)</th>
+            </tr>
+          </thead>
+          <tbody id="anomalyTableBody" class="divide-y divide-gray-200 dark:divide-gray-600"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Live Anomaly Table -->
+    <div id="liveAnomalyTableContainer" class="mt-6" style="display: none;">
+      <h5 class="text-lg font-semibold text-center text-gray-800 dark:text-gray-200 mb-2">📡 Real-Time Detected Anomalies</h5>
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+        <table class="table anomaly-table w-full">
+          <thead class="bg-gray-100 dark:bg-gray-700">
+            <tr>
+              <th class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300">Timestamp</th>
+              <th class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300">Energy Usage (kWh)</th>
+              <th class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300">Cause</th>
+            </tr>
+          </thead>
+          <tbody id="liveAnomalyTableBody" class="divide-y divide-gray-200 dark:divide-gray-600"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- AI Insight Box -->
+    <div id="aiInsightBox" class="mt-6 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg shadow-md text-left" style="display: none;">
+      <h5 class="text-md font-semibold text-blue-800 dark:text-blue-200 mb-2">🔍 AI Insight:</h5>
+      <p id="aiInsightText" class="text-sm text-gray-700 dark:text-gray-300">Waiting for data...</p>
+    </div>
+
+    <!-- SHAP Explanation Modal -->
+    <div class="modal fade" id="shapModal" tabindex="-1" aria-labelledby="shapModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-white dark:bg-gray-800">
+          <div class="modal-header border-b border-gray-200 dark:border-gray-600">
+            <h5 class="modal-title text-lg font-semibold text-gray-900 dark:text-gray-100" id="shapModalLabel">SHAP Explanation</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body p-4">
+            <canvas id="shapChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
 
   <script>
     const form = document.getElementById('uploadForm');
@@ -155,6 +216,8 @@
     const downloadPDF = document.getElementById('downloadPDF');
     const tableContainer = document.getElementById('anomalyTableContainer');
     const tableBody = document.getElementById('anomalyTableBody');
+    const liveTableContainer = document.getElementById('liveAnomalyTableContainer');
+    const liveTableBody = document.getElementById('liveAnomalyTableBody');
     const startDateInput = document.getElementById('startDate');
     const endDateInput = document.getElementById('endDate');
     const applyFilterBtn = document.getElementById('applyFilter');
@@ -163,12 +226,15 @@
     let chartInstance = null;
     let fullData = [];
     let shapChart;
+    let liveData = { labels: [], usage: [], anomalies: [], metadata: [] };
 
+    // Theme Toggle
     themeToggle.onchange = () => {
       document.body.classList.toggle('dark-theme');
       document.body.classList.toggle('light-theme');
     };
 
+    // Moving Average Calculation
     function movingAverage(data, windowSize = 20) {
       const result = [];
       for (let i = 0; i < data.length; i++) {
@@ -180,33 +246,32 @@
       return result;
     }
 
+    // Upload and Render
     form.onsubmit = async (e) => {
       e.preventDefault();
-      spinner.style.display = 'block';
+      spinner.style.display = 'flex';
       tableContainer.style.display = 'none';
+      liveTableContainer.style.display = 'none';
 
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
       formData.append('model', modelSelect.value);
 
-      const response = await fetch('/upload', { method: 'POST', body: formData });
-      const data = await response.json();
-      fullData = data;
-      spinner.style.display = 'none';
-
-      downloadLink.style.display = downloadImage.style.display = downloadPDF.style.display = 'inline';
-      renderChart(data);
-      renderAnomalyTable(data);
-
-      const csvRows = ["timestamp,energy_usage,anomaly"];
-      data.forEach(d => {
-        const line = `${d.timestamp},${d.energy_usage},${d.anomaly}`;
-        if (!csvRows.includes(line)) csvRows.push(line);
-      });
-      const blob = new Blob([csvRows.join("\n")], { type: 'text/csv' });
-      downloadLink.href = URL.createObjectURL(blob);
+      try {
+        const response = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await response.json();
+        fullData = data;
+        spinner.style.display = 'none';
+        downloadLink.style.display = downloadImage.style.display = downloadPDF.style.display = 'inline';
+        renderChart(data);
+        renderAnomalyTable(data);
+      } catch (err) {
+        spinner.style.display = 'none';
+        alert('Error uploading file: ' + err.message);
+      }
     };
 
+    // Render Chart
     const renderChart = (data) => {
       const labels = data.map(d => d.timestamp);
       const usage = data.map(d => d.energy_usage);
@@ -220,22 +285,27 @@
         data: {
           labels,
           datasets: [
-            { label: 'Energy Usage', data: usage, borderColor: 'blue', borderWidth: 1.5, pointRadius: 0 },
+            { label: 'Energy Usage', data: usage, borderColor: 'blue', borderWidth: 2, pointRadius: 0 },
             { label: 'Anomalies', data: anomalies, pointBackgroundColor: 'red', pointRadius: 6, type: 'scatter', showLine: false },
             { label: 'Moving Avg (20)', data: maData, borderColor: 'green', borderDash: [5, 5], borderWidth: 2, pointRadius: 0 }
           ]
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             zoom: {
               pan: { enabled: true, mode: 'xy' },
               zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' }
+            },
+            tooltip: {
+              mode: 'nearest',
+              intersect: false
             }
           },
           scales: {
-            x: { title: { display: true, text: 'Date' }, ticks: { autoSkip: true, maxTicksLimit: 15 } },
-            y: { title: { display: true, text: 'Usage (kWh)' } }
+            x: { title: { display: true, text: 'Date', font: { size: 14 } }, ticks: { autoSkip: true, maxTicksLimit: 15 } },
+            y: { title: { display: true, text: 'Usage (kWh)', font: { size: 14 } } }
           },
           onClick: (event, elements) => {
             if (elements.length > 0) {
@@ -261,34 +331,36 @@
       };
     };
 
+    // Render Anomaly Table
     const renderAnomalyTable = (data) => {
       const anomalies = data.filter(d => d.anomaly === -1);
-      tableBody.innerHTML = "";
+      tableBody.innerHTML = '';
       if (anomalies.length === 0) {
         tableContainer.style.display = 'none';
         return;
       }
-
       anomalies.forEach(row => {
-        tableBody.innerHTML += `<tr><td>${row.timestamp}</td><td>${row.energy_usage.toFixed(2)}</td></tr>`;
+        tableBody.innerHTML += `<tr><td class="px-4 py-2">${row.timestamp}</td><td class="px-4 py-2">${row.energy_usage.toFixed(2)}</td></tr>`;
       });
       tableContainer.style.display = 'block';
     };
 
+    // Date Range Filter
     applyFilterBtn.onclick = () => {
       const start = startDateInput.value;
       const end = endDateInput.value;
-      if (!start || !end) return alert("Please select both dates.");
+      if (!start || !end) return alert('Please select both dates.');
       const filtered = fullData.filter(d => d.timestamp >= start && d.timestamp <= end);
-      if (filtered.length === 0) return alert("No data in selected range.");
+      if (filtered.length === 0) return alert('No data in selected range.');
       renderChart(filtered);
       renderAnomalyTable(filtered);
     };
 
+    // Download Handlers
     downloadImage.onclick = () => {
       const link = document.createElement('a');
       link.href = chartInstance.toBase64Image();
-      link.download = "wattsup_chart.png";
+      link.download = 'wattsup_chart.png';
       link.click();
     };
 
@@ -296,6 +368,7 @@
       html2pdf().from(document.body).save('wattsup_report.pdf');
     };
 
+    // Pan and Zoom Controls
     function panChart(direction) {
       const amount = 100;
       if (!chartInstance) return;
@@ -316,10 +389,15 @@
       chartInstance?.resetZoom();
     }
 
+    // SHAP Explanation Modal
     function showShapExplanation(index) {
       fetch(`/api/explain/${index}`)
         .then(res => res.json())
         .then(data => {
+          if (data.error) {
+            alert(`Error fetching SHAP explanation: ${data.error}`);
+            return;
+          }
           const labels = Object.keys(data.explanation);
           const values = Object.values(data.explanation);
 
@@ -333,20 +411,37 @@
               datasets: [{
                 label: 'SHAP Value',
                 data: values,
-                backgroundColor: values.map(v => v > 0 ? 'green' : 'red')
+                backgroundColor: values.map(v => v > 0 ? '#28a745' : '#dc3545'),
+                borderColor: values.map(v => v > 0 ? '#218838' : '#c82333'),
+                borderWidth: 1
               }]
             },
             options: {
+              responsive: true,
+              maintainAspectRatio: false,
               plugins: {
                 title: {
                   display: true,
-                  text: `Feature Impact for Index #${index}`
+                  text: `Feature Impact for Anomaly #${index}`,
+                  font: { size: 16, weight: 'bold' }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: (context) => {
+                      const value = context.parsed.y;
+                      const feature = context.label;
+                      return `${feature}: ${value > 0 ? '+' : ''}${value.toFixed(4)}`;
+                    }
+                  }
                 }
               },
-              responsive: true,
               scales: {
                 y: {
-                  beginAtZero: true
+                  beginAtZero: true,
+                  title: { display: true, text: 'SHAP Value', font: { size: 14 } }
+                },
+                x: {
+                  title: { display: true, text: 'Features', font: { size: 14 } }
                 }
               }
             }
@@ -355,19 +450,18 @@
           const modal = new bootstrap.Modal(document.getElementById('shapModal'));
           modal.show();
         })
-        .catch(err => console.error("SHAP fetch error", err));
+        .catch(err => {
+          console.error("SHAP fetch error", err);
+          alert("Failed to load SHAP explanation.");
+        });
     }
 
-    // ✅ WebSocket Live Stream with Anomaly Support
+    // WebSocket Live Stream
     const socket = io("http://localhost:5000");
-
-    const liveLabels = [];
-    const liveUsageData = [];
-    const liveAnomalyData = [];
-    const liveAnomalyMetadata = [];
 
     startLiveStreamBtn.onclick = () => {
       socket.emit('start_stream');
+      liveTableContainer.style.display = 'block';
     };
 
     socket.on('live_data', async (row) => {
@@ -376,27 +470,27 @@
       const isAnomaly = row.anomaly === 1;
       const cause = row.cause;
 
-      liveLabels.push(timestamp);
-      liveUsageData.push(usage);
-      liveAnomalyData.push(isAnomaly ? usage : null);
-      liveAnomalyMetadata.push(isAnomaly ? cause : null);
+      liveData.labels.push(timestamp);
+      liveData.usage.push(usage);
+      liveData.anomalies.push(isAnomaly ? usage : null);
+      liveData.metadata.push(isAnomaly ? cause : null);
 
       if (!chartInstance) {
         chartInstance = new Chart(ctx, {
           type: 'line',
           data: {
-            labels: liveLabels,
+            labels: liveData.labels,
             datasets: [
               {
                 label: 'Live Energy Usage',
-                data: liveUsageData,
+                data: liveData.usage,
                 borderColor: 'orange',
                 borderWidth: 2,
                 pointRadius: 2
               },
               {
                 label: 'Anomalies',
-                data: liveAnomalyData,
+                data: liveData.anomalies,
                 pointBackgroundColor: 'red',
                 pointRadius: 6,
                 type: 'scatter',
@@ -406,22 +500,25 @@
           },
           options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
               tooltip: {
+                mode: 'nearest',
+                intersect: false,
                 callbacks: {
                   label: (context) => {
                     const idx = context.dataIndex;
                     if (context.dataset.label === 'Anomalies') {
-                      return `⚠ Anomaly: ${liveAnomalyData[idx]} kWh (${liveAnomalyMetadata[idx] || 'Unknown'})`;
+                      return `⚠ Anomaly: ${liveData.anomalies[idx]} kWh (${liveData.metadata[idx] || 'Unknown'})`;
                     }
-                    return `Usage: ${liveUsageData[idx]} kWh`;
+                    return `Usage: ${liveData.usage[idx]} kWh`;
                   }
                 }
               }
             },
             scales: {
-              x: { title: { display: true, text: 'Timestamp' } },
-              y: { title: { display: true, text: 'Usage (kWh)' } }
+              x: { title: { display: true, text: 'Timestamp', font: { size: 14 } } },
+              y: { title: { display: true, text: 'Usage (kWh)', font: { size: 14 } } }
             },
             onClick: (event, elements) => {
               if (elements.length > 0) {
@@ -439,22 +536,27 @@
         chartInstance.data.labels.push(timestamp);
         chartInstance.data.datasets[0].data.push(usage);
         chartInstance.data.datasets[1].data.push(isAnomaly ? usage : null);
-        liveAnomalyMetadata.push(isAnomaly ? cause : null);
+        liveData.metadata.push(isAnomaly ? cause : null);
 
         const maxPoints = 100;
         if (chartInstance.data.labels.length > maxPoints) {
           chartInstance.data.labels.shift();
           chartInstance.data.datasets[0].data.shift();
           chartInstance.data.datasets[1].data.shift();
-          liveAnomalyMetadata.shift();
+          liveData.metadata.shift();
         }
 
         chartInstance.update();
       }
 
-      // ✅ Show Insight Box and Get AI Insight
+      // Update Live Anomaly Table
       if (isAnomaly) {
-        document.getElementById("aiInsightBox").style.display = "block";
+        liveTableBody.innerHTML += `<tr><td class="px-4 py-2">${timestamp}</td><td class="px-4 py-2">${usage.toFixed(2)}</td><td class="px-4 py-2">${cause}</td></tr>`;
+      }
+
+      // AI Insight
+      if (isAnomaly) {
+        document.getElementById('aiInsightBox').style.display = 'block';
         try {
           const res = await fetch('/insight', {
             method: 'POST',
@@ -462,12 +564,46 @@
             body: JSON.stringify({ timestamp, energy_usage: usage })
           });
           const data = await res.json();
-          document.getElementById("aiInsightText").innerText = data.insight;
+          document.getElementById('aiInsightText').innerText = data.insight;
         } catch (err) {
-          document.getElementById("aiInsightText").innerText = "⚠️ Could not fetch AI insight.";
+          document.getElementById('aiInsightText').innerText = '⚠️ Could not fetch AI insight.';
         }
       }
     });
+
+    // CSV Download
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      spinner.style.display = 'flex';
+      tableContainer.style.display = 'none';
+      liveTableContainer.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('model', modelSelect.value);
+
+      try {
+        const response = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await response.json();
+        fullData = data;
+        spinner.style.display = 'none';
+        downloadLink.style.display = downloadImage.style.display = downloadPDF.style.display = 'inline';
+
+        const csvRows = ['timestamp,energy_usage,anomaly'];
+        data.forEach(d => {
+          const line = `${d.timestamp},${d.energy_usage},${d.anomaly}`;
+          if (!csvRows.includes(line)) csvRows.push(line);
+        });
+        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+        downloadLink.href = URL.createObjectURL(blob);
+
+        renderChart(data);
+        renderAnomalyTable(data);
+      } catch (err) {
+        spinner.style.display = 'none';
+        alert('Error uploading file: ' + err.message);
+      }
+    };
   </script>
 </body>
 </html>
